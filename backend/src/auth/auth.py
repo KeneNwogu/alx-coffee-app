@@ -1,7 +1,8 @@
 import json
 import os
 
-from flask import request, _request_ctx_stack
+import requests
+from flask import request, _request_ctx_stack, abort
 from functools import wraps
 from jose import jwt
 from urllib.request import urlopen
@@ -52,7 +53,10 @@ def get_token_auth_header():
 
     auth_type, auth_token = auth_header.split('')
     if auth_type.lower() != 'bearer':
-        raise AuthError('Bearer token was not provided', 401)
+        raise AuthError({
+            'message': 'Bearer token was not provided',
+            'success': False
+        }, 401)
 
     return auth_token
 
@@ -71,7 +75,11 @@ def get_token_auth_header():
 
 
 def check_permissions(permission, payload):
-    raise Exception('Not Implemented')
+    if payload.get('scope'):
+        for scope in payload['scope'].split():
+            if permission == scope:
+                return True
+    raise AuthError({'message': 'Do not possess required permissions'}, 403)
 
 
 '''
@@ -90,8 +98,33 @@ def check_permissions(permission, payload):
 
 
 def verify_decode_jwt(token):
-    auth0_verification_url = f'https://{AUTH0_DOMAIN}/.well-known/jwks.json'
-
+    auth0_verification = requests.get(f'https://{AUTH0_DOMAIN}/.well-known/jwks.json')
+    jwks = auth0_verification.json()
+    unverified_header = jwt.get_unverified_header(token)
+    rsa_key = {}
+    for key in jwks['keys']:
+        if key['kid'] == unverified_header['kid']:
+            rsa_key['kty'] = unverified_header['kty']
+            rsa_key['kid'] = unverified_header['kid']
+            rsa_key['use'] = unverified_header['use']
+            rsa_key['n'] = unverified_header['n']
+            rsa_key['e'] = unverified_header['e']
+    if rsa_key:
+        try:
+            payload = jwt.decode(
+                token,
+                rsa_key,
+                algorithms=ALGORITHMS,
+                audience=API_AUDIENCE,
+                issuer=f'https://{AUTH0_DOMAIN}/'
+            )
+        except jwt.ExpiredSignatureError:
+            raise AuthError({'success': False, 'message': 'Token has expired'}, 401)
+        except jwt.JWTClaimsError:
+            raise AuthError({'success': False, 'message': 'Invalid token passed'}, 401)
+        except Exception:
+            raise AuthError({'success': False, 'message': 'Token could not be parsed'}, 401)
+        return payload
     raise Exception('Not Implemented')
 
 
@@ -111,10 +144,13 @@ def requires_auth(permission=''):
     def requires_auth_decorator(f):
         @wraps(f)
         def wrapper(*args, **kwargs):
-            token = get_token_auth_header()
-            payload = verify_decode_jwt(token)
-            check_permissions(permission, payload)
-            return f(payload, *args, **kwargs)
+            try:
+                token = get_token_auth_header()
+                payload = verify_decode_jwt(token)
+                check_permissions(permission, payload)
+                return f(payload, *args, **kwargs)
+            except AuthError as e:
+                abort(e.status_code, error_message=e.error)
 
         return wrapper
 
