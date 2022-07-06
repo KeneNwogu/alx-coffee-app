@@ -21,17 +21,18 @@ db_drop_and_create_all()
 
 # ROUTES
 @app.route('/drinks', methods=['GET'])
-def show_drinks():
+@requires_auth('get:drinks')
+def show_drinks(payload):
     drinks = Drink.query.all()
-    return {
+    return jsonify({
         "success": True,
         "drinks": [drink.short() for drink in drinks]
-    }
+    })
 
 
 @app.route('/drinks-detail')
 @requires_auth('get:drinks-detail')
-def drinks_detail():
+def drinks_detail(payload):
     drinks = Drink.query.all()
     return {
         "success": True,
@@ -41,9 +42,9 @@ def drinks_detail():
 
 @app.route('/drinks', methods=['POST'])
 @requires_auth('post:drinks')
-def make_drink():
+def make_drink(payload):
     data = request.get_json(force=True)
-    drink = Drink(title=data.get('title'), recipe=data.get('recipe'))
+    drink = Drink(title=data.get('title'), recipe=json.dumps(data.get('recipe')))
     drink.insert()
     return {
         "success": True,
@@ -53,12 +54,13 @@ def make_drink():
 
 @app.route('/drinks/<int:id>', methods=['PATCH'])
 @requires_auth('patch:drinks')
-def edit_drinks(id):
+def edit_drinks(payload, id):
     data = request.get_json(force=True)
     drink = Drink.query.get(int(id))
-    fields = ['title', 'recipe']
-    for field in fields:
-        setattr(drink, field, data.get(field))
+    if data.get('title'):
+        drink.title = data['title']
+    if data.get('recipe'):
+        drink.recipe = json.dumps(data['recipe'])
     drink.update()
     return {
         "success": True,
@@ -67,7 +69,8 @@ def edit_drinks(id):
 
 
 @app.route('/drinks/<int:id>', methods=['DELETE'])
-def delete_drink(id):
+@requires_auth('delete:drinks')
+def delete_drink(payload, id):
     drink = Drink.query.get(int(id))
     drink.delete()
     return {
@@ -108,6 +111,6 @@ def resource_not_found(error):
 def authentication_error(exception):
     return jsonify({
         "success": False,
-        "error": exception.error,
-        "message": exception.message
-    })
+        "error": "Unauthorized",
+        "message": "Unauthorized"
+    }), 401

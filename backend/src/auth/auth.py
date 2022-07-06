@@ -17,7 +17,7 @@ AUTH0_CLIENT_ID = os.environ.get('AUTH0_CLIENT_ID')
 APP_SECRET_KEY = os.environ.get('APP_SECRET_KEY')
 
 ALGORITHMS = ['RS256']
-API_AUDIENCE = 'dev'
+API_AUDIENCE = 'http://127.0.0.1:5000/'
 
 
 # AuthError Exception
@@ -46,17 +46,17 @@ class AuthError(Exception):
 
 def get_token_auth_header():
     auth_header = request.headers.get('Authorization')
-    if auth_header is None:
+    if auth_header is None or not auth_header:
         raise AuthError('No auth headers provided', 401)
-    if len(auth_header.split('')) != 2:
+    if len(auth_header.split(' ')) != 2:
         raise AuthError('Invalid Authorization format', 401)
 
-    auth_type, auth_token = auth_header.split('')
+    auth_type, auth_token = auth_header.split(' ')
     if auth_type.lower() != 'bearer':
         raise AuthError({
             'message': 'Bearer token was not provided',
             'success': False
-        }, 401)
+        }, 422)
 
     return auth_token
 
@@ -75,8 +75,8 @@ def get_token_auth_header():
 
 
 def check_permissions(permission, payload):
-    if payload.get('scope'):
-        for scope in payload['scope'].split():
+    if payload.get('permissions'):
+        for scope in payload['permissions']:
             if permission == scope:
                 return True
     raise AuthError({'message': 'Do not possess required permissions'}, 403)
@@ -104,11 +104,11 @@ def verify_decode_jwt(token):
     rsa_key = {}
     for key in jwks['keys']:
         if key['kid'] == unverified_header['kid']:
-            rsa_key['kty'] = unverified_header['kty']
-            rsa_key['kid'] = unverified_header['kid']
-            rsa_key['use'] = unverified_header['use']
-            rsa_key['n'] = unverified_header['n']
-            rsa_key['e'] = unverified_header['e']
+            rsa_key['kty'] = key['kty']
+            rsa_key['kid'] = key['kid']
+            rsa_key['use'] = key['use']
+            rsa_key['n'] = key['n']
+            rsa_key['e'] = key['e']
     if rsa_key:
         try:
             payload = jwt.decode(
@@ -125,7 +125,7 @@ def verify_decode_jwt(token):
         except Exception:
             raise AuthError({'success': False, 'message': 'Token could not be parsed'}, 401)
         return payload
-    raise Exception('Not Implemented')
+    raise AuthError({'success': False, 'message': 'Token could not be parsed'}, 401)
 
 
 '''
@@ -150,8 +150,7 @@ def requires_auth(permission=''):
                 check_permissions(permission, payload)
                 return f(payload, *args, **kwargs)
             except AuthError as e:
-                abort(e.status_code, error_message=e.error)
-
+                abort(e.status_code)
         return wrapper
 
     return requires_auth_decorator

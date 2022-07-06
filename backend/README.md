@@ -32,21 +32,16 @@ This will install all of the required packages we selected within the `requireme
 
 ## Running the server
 
-From within the `./src` directory first ensure you are working using your created virtual environment.
+From within the `./src/backend` directory first ensure you are working using your created virtual environment.
 
 Each time you open a new terminal session, run:
-
-```bash
-export FLASK_APP=api.py;
-```
 
 To run the server, execute:
 
 ```bash
-flask run --reload
+python app.py
 ```
 
-The `--reload` flag will detect file changes and restart the server automatically.
 
 ## Tasks
 
