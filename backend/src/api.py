@@ -21,8 +21,7 @@ db_drop_and_create_all()
 
 # ROUTES
 @app.route('/drinks', methods=['GET'])
-@requires_auth('get:drinks')
-def show_drinks(payload):
+def show_drinks():
     drinks = Drink.query.all()
     return jsonify({
         "success": True,
